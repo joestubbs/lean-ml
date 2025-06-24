@@ -8,23 +8,35 @@ corresponding Python source code.
 
 import json
 import os 
+import timeit 
+
 from pantograph import Server
 import llms
 
 
 
 # API keys and URL for the language model and MCP server
-LLM_API_KEY = os.environ.get("LLM_API_KEY", "e4de26f2-799e-42b8-a154-7229e6589758")
+LLM_API_KEY = os.environ.get("LLM_API_KEY", "ollama")
 LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "https://tejas.tacc.utexas.edu/v1/b0ffa48b-2509-4bd8-a6d9-5bed9a66f902")
 LLM_MODEL = os.environ.get("LLM_MODEL", "Meta-Llama-3.1-8B-Instruct")
 LEAN_MCP_API_KEY = os.environ.get("LEAN_MCP_API_KEY", "ZXQgrJ8bb83aRc84KYLQkBPStz7iO-kwnzhoWverOpA")
+
+
+# Pre-processed data from OEIS -- this file is generate using the oeis.py script contained
+# withing the sequencelib git repo.
+OEIS_RESULTS_FILE = os.environ.get("OEIS_RESULTS_FILE", 
+                                   os.path.expanduser("~/oeis_python_results_more.json"))
+
+# Path to an output file where this script should write its results
+OEIS_LEAN_OUTPUT_FILE = os.environ.get("OEIS_LEAN_OUTPUT_FILE",
+                                       os.path.expanduser("~/oeis_lean_source.json"))
 
 
 def get_python_src():
     """
     Load the OEIS sequences that have Python source implementations.
     """
-    with open(os.path.expanduser("~/oeis_python_results.json"), 'r') as f:
+    with open(OEIS_RESULTS_FILE, 'r') as f:
         return json.load(f)
 
 
@@ -161,6 +173,119 @@ def eval_lean(server, lean_src):
     return error, error_message
 
 
+def generate_repair_lean_loop(python_src, seq_desc, max_loops=5, send_imports=False):
+    """
+    High-level function that takes the Python source code, `python_src`, 
+    implementing a sequence with a description, `seq_desc`, and tries to 
+    generate a Lean version using an LLM. It does this by asking the LLM to 
+    generate Lean code, calling pantograph to evaluate the generated Lean, 
+    checking for errors, and, if there are errors, asking the LLM to repair 
+    them. It does this loop for a `max_loops` iterations. If `send_imports` is True,
+    this function will also send the LLM-generated imports to pantograph, but this
+    is turned off by default, as there have been many issues observed with the 
+    LLM-generated Lean imports.
+
+    """
+    client = llms.get_client(base_url=LLM_BASE_URL, api_key=LLM_API_KEY)
+    idx = 0
+
+    # create the initial lean source
+    lean_src = generate_lean_function(client=client, 
+                                      seq_desc=seq_desc, 
+                                      python_src=python_src)
+    # print(f"Got initial lean source: {lean_src}")
+    imports, clean_src = extract_and_remove_imports(lean_src=lean_src)
+    
+    # main loop 
+    while idx < max_loops:
+        print(f"Top of iteration {idx+1}")
+        error = None 
+        error_message = None
+        if send_imports:
+            server = get_lean_server(imports=imports)
+        else:
+            server = get_lean_server()
+        # evaluate the Lean
+        error, error_message = eval_lean(server=server, lean_src=clean_src)
+        if not error:
+            print(f"\n*****The Lean source code type checked!")
+            # print(f"Final source: {lean_src}")
+            # print("Exiting")
+            break
+        else:
+            # print(f"\nThere was an error with the Lean source. \nError: {error_message}\n Attempting to repair the Lean..")
+            pass
+        # try to repair the Lean
+        lean_src = repair_lean_function(client=client, 
+                                        seq_desc=seq_desc, 
+                                        python_src=python_src, 
+                                        lean_src=lean_src, 
+                                        error_msg=error_message)
+        # print(f"Got repaired lean source: {lean_src}")
+        imports, clean_src = extract_and_remove_imports(lean_src=lean_src)
+        # print(f"Got imports for repaired: {imports}")
+        # print(f"Got clean source for repaired: {clean_src}")
+        idx += 1 
+
+    # if we had an error, we tried a final repair, so let's evaluate the final
+    # source before returning 
+    if error:
+        error, error_message = eval_lean(server=server, lean_src=clean_src)
+        if not error:
+            print(f"\n*****The Lean source code type checked!")
+    return lean_src, imports, clean_src, error, error_message
+
+
+def process_oeis_sequences(tot_seqs_limit=10):
+    """
+    Function to process a set of OEIS sequences from the OEIS_RESULTS_FILE and 
+    generate Lean source code for each function. This function will process the 
+    first `tot_seqs_limit` seqeunces; to process the entire file, call with:
+        process_oeis_sequences(tot_seqs_limit=20000)
+    (there are about 385,000 sequences in the OEIS but less than 20,000 have Python
+    functions)
+    """
+    results = {}
+    oeis_source = get_python_src()
+    idx = 0
+    errors = 0 
+    start = timeit.default_timer()
+    for seq_id, value in oeis_source.items():
+        idx += 1
+        print(f"Processing sequence {seq_id}, number {idx} of {tot_seqs_limit}")
+        try:
+            python_src = value['python_src']
+            seq_desc = value['desc']
+        except KeyError as e:
+            errors += 1 
+            print(f"Got Key error for sequence {seq_id}; error: {e}; skipping")
+            continue 
+        lean_src, imports, clean_src, error, error_msg = generate_repair_lean_loop(python_src=python_src, seq_desc=seq_desc)
+        results[seq_id] = {
+            "lean_src": lean_src,
+            "clean_src": clean_src, 
+            "imports": imports, 
+            "error": error,
+            "error_msg": error_msg,
+        }
+        cur = timeit.default_timer()
+        tot_sec = cur - start
+        print(f"Current run time: {tot_sec} seconds")
+        if idx >= tot_seqs_limit:
+            break
+    # write results
+    print(f"Writing finale results to: {OEIS_LEAN_OUTPUT_FILE}")
+    with open(OEIS_LEAN_OUTPUT_FILE, 'w+') as r: 
+        r.write(json.dumps(results))
+
+
+
+# Main function
+if __name__ == "__main__":
+    process_oeis_sequences()
+
+
+
 # Tests ----------------------
 
 def test_create_lean():
@@ -192,47 +317,17 @@ def test_create_and_eval_lean(send_imports=False):
     else:
         print("Lean source code type checked!")
 
+
 def test_create_eval_repair_lean(send_imports=False, max_loops=5):
 
-    client = llms.get_client(base_url=LLM_BASE_URL, api_key=LLM_API_KEY)
+    
     seq_desc = "the number of distinct characteristic polynomials of n X n matrices with elements {0, 1}"
     python_src = """from itertools import product
     from sympy import Matrix
     def A272661(n): return len({tuple(Matrix(n,n,p).charpoly().as_list()) for p in product((0,1),repeat=n**2)}) if n else 1
     """
-    
-    idx = 0
-
-    # create the initial lean source
-    lean_src = test_create_lean()
-    imports, clean_src = extract_and_remove_imports(lean_src=lean_src)
-    
-    # main loop 
-    while idx < max_loops:
-        print(f"Top of iteration {idx+1}")
-        print(f"Got lean source: {lean_src}")
-        if send_imports:
-            server = get_lean_server(imports=imports)
-        else:
-            server = get_lean_server()
-        # evaluate the Lean
-        error, error_message = eval_lean(server=server, lean_src=clean_src)
-        if not error:
-            print(f"The Lean source code type checked! Final source: {lean_src}")
-            print("Exiting")
-            break
-        else:
-            print(f"There was an error with the Lean source. Error: {error_message}")
-        # try to repair the Lean
-        print("Attempting to repair the Lean..")
-        lean_src = repair_lean_function(client=client, 
-                                        seq_desc=seq_desc, 
-                                        python_src=python_src, 
-                                        lean_src=lean_src, 
-                                        error_msg=error_message)
-        imports, clean_src = extract_and_remove_imports(lean_src=lean_src)
-        print(f"Got imports for repaired: {imports}")
-        print(f"Got clean source for repaired: {clean_src}")
-        idx += 1 
-
+    return generate_repair_lean_loop(python_src=python_src, 
+                                     seq_desc=seq_desc,
+                                     send_imports=send_imports, 
+                                     max_loops=max_loops)
 
