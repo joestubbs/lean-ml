@@ -12,6 +12,7 @@ import json
 import os
 import re
 import sys
+import subprocess
 from io import StringIO
 import timeit
 import contextlib
@@ -58,16 +59,14 @@ def exec_oeis_python(python_source):
     Try to execute the python source code associated with an OEIS sequence.
     Returns the associated stdout.
     """
-    with stdoutIO() as s:
-        try:
-            exec(python_source)
-            output = s.getvalue()
-            print(f"output: {output}")
-            return output
-        except Exception as e:
-            output = f"Got exception: {e}"
-            print(output)
-            return output
+
+    try:
+        result = subprocess.run(
+            [sys.executable, "-c", python_source], capture_output=True, text=True
+        )
+        return result.stdout
+    except Exception as e:
+        return f"Got exception: {e}"
 
 
 def parse_string_to_int_list(input_string):
@@ -83,7 +82,7 @@ def parse_string_to_int_list(input_string):
     """
     # Use re.findall to find all sequences of one or more digits
     # The regex r'\d+' matches one or more digit characters.
-    numbers_as_strings = re.findall(r"\d+", input_string)
+    numbers_as_strings = re.findall(r"-?\d+", input_string)
 
     # Convert each extracted string to an integer using a list comprehension
     int_list = [int(num_str) for num_str in numbers_as_strings]
@@ -113,17 +112,27 @@ def compare_python_to_oeis_vals(python_output, actual_values):
     if python_values == actual_values:
         return ("Exact Equality", len(python_values))
 
+    # check if Python has more values and matches the exact values in the OEIS:
+    if len(python_values) > len(actual_values) and (
+        python_values[: len(actual_values)] == actual_values
+    ):
+        return ("Exact Equality; more Python values", len(actual_values))
+
+    # handle a special case of 0 python values:
+    if len(python_values) == 0:
+        return ("No matching values; Python list was empty", 0)
+
     # check for partial equality with all python values:
     if actual_values[: len(python_values)] == python_values:
-        return ("Partial Equality", len(python_values))
+        return ("Partial Equality; Python had fewer values", len(python_values))
 
-    # check for an initial match:
+    # check for initial matches:
     for idx, val in enumerate(python_values):
         if idx >= len(actual_values):
-            return ("Partial Equality; Python had more values", len(actual_values))
+            return ("Exact Equality; more Python values", len(actual_values))
         if not val == actual_values[idx]:
             if idx > 0:
-                return ("Partial Equality", idx)
+                return (f"Partial Equality; Python value disagreed at {idx}", idx)
             else:
                 return ("No matching values", 0)
 
@@ -142,7 +151,7 @@ def write_oeis_exec_results_file(results):
         r.write(json.dumps(results))
 
 
-def exec_all_oeis_python(start_from_prev=False, tot_seqs_limit=100):
+def exec_all_oeis_python(start_from_prev=True, tot_seqs_limit=500):
     """
     Function to try and execute the Python code associated with a set of OEIS sequences
     and compare results with the sequence values. This function writes the results
@@ -157,8 +166,13 @@ def exec_all_oeis_python(start_from_prev=False, tot_seqs_limit=100):
     python_values_parsed = 0
     exact_matches = 0
     partial_matches = 0
+    no_matches = 0
     start = timeit.default_timer()
     for seq_id, value in oeis_source.items():
+        seq_start = timeit.default_timer()
+        # skip A339566 for now, as it takes about 3 hours to run.
+        if seq_id == "A339566":
+            continue
         idx += 1
         if seq_id in results.keys():
             print(f"Skipping sequence {seq_id} as it was already in the results.")
@@ -184,10 +198,14 @@ def exec_all_oeis_python(start_from_prev=False, tot_seqs_limit=100):
             # result is a tuple with a string and an integer index
             result = compare_python_to_oeis_vals(output, values)
 
+        cur = timeit.default_timer()
+        seq_time = cur - seq_start
+        tot_time = cur - start
         results[seq_id] = {
             "seq_desc": seq_desc,
             "python_result": result[0],
             "python_match_idx": result[1],
+            "time_for_sequence": seq_time,
         }
         if "Error" in result[0]:
             print(f"Error for sequence {seq_id}; Error: {result[0]}")
@@ -198,7 +216,13 @@ def exec_all_oeis_python(start_from_prev=False, tot_seqs_limit=100):
             exact_matches += 1
         elif "Partial Equality" in result[0]:
             partial_matches += 1
+        elif "No matching values" in result[0]:
+            no_matches += 1
         write_oeis_exec_results_file(results=results)
+        print(f"Time to analyze sequence: {seq_time}")
+        # print total run time every 10:
+        if idx % 10 == 0:
+            print(f"Total runtime so far: {tot_time}")
         if idx >= tot_seqs_limit:
             break
     # Report final results:
@@ -207,6 +231,8 @@ def exec_all_oeis_python(start_from_prev=False, tot_seqs_limit=100):
     print(f"Total errors: {errors}")
     print(f"Exact Matches: {exact_matches}")
     print(f"Partial Matches: {partial_matches}")
+    print(f"No Matches: {no_matches}")
+    print(f"Total run time: {tot_time}")
 
 
 if __name__ == "__main__":
