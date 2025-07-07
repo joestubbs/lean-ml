@@ -62,7 +62,10 @@ def exec_oeis_python(python_source):
 
     try:
         result = subprocess.run(
-            [sys.executable, "-c", python_source], capture_output=True, text=True
+            [sys.executable, "-c", python_source],
+            capture_output=True,
+            text=True,
+            timeout=600,
         )
         return result.stdout
     except Exception as e:
@@ -172,6 +175,9 @@ def exec_all_oeis_python(start_from_prev=True, tot_seqs_limit=500):
         seq_start = timeit.default_timer()
         # skip A339566 for now, as it takes about 3 hours to run.
         if seq_id == "A339566":
+            continue
+        # skip A339134 and A275078 as it runs an infinite loop
+        if seq_id == "A339134" or seq_id == "A275078":
             continue
         idx += 1
         if seq_id in results.keys():
