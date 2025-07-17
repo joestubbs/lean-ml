@@ -6,33 +6,6 @@ In all examples below, DSP was given three examples of Python to Lean
 translations. See the prompts defined in the deepSeek_prover.py script. 
 
 
-## A001222
-
-*Number of prime divisors of n counted with multiplicity (also called big omega of n, bigomega(n) or Omega(n))*
-
-Python:
-
-```
-from sympy import primeomega
-def a(n): return primeomega(n)
-print([a(n) for n in range(1, 112)])
-```
-
-DSP:
-
-```
-import Mathlib.NumberTheory.ArithmeticFunction
-import Mathlib.NumberTheory.PrimeCounting
-
--- Define the Lean function to compute the number of prime divisors of n with multiplicity
-def a (n : ℕ) : ℕ := (Nat.factorization n).sum (fun p _ => 1)
-```
-
-In this example, the generated Lean type checks but it does 
-not produce the correct sequence. Note that the use of `p` produces an 
-unused variable warning. 
-
-
 ## A001221
 
 *Number of distinct primes dividing n.*
@@ -92,6 +65,31 @@ def primePiFix2 (n : ℕ) : ℕ :=
   ((List.range (n + 2)).filter (fun x => Nat.Prime x)).length
 ```
 
+## A001222
+
+*Number of prime divisors of n counted with multiplicity (also called big omega of n, bigomega(n) or Omega(n))*
+
+Python:
+
+```
+from sympy import primeomega
+def a(n): return primeomega(n)
+print([a(n) for n in range(1, 112)])
+```
+
+DSP:
+
+```
+import Mathlib.NumberTheory.ArithmeticFunction
+import Mathlib.NumberTheory.PrimeCounting
+
+-- Define the Lean function to compute the number of prime divisors of n with multiplicity
+def a (n : ℕ) : ℕ := (Nat.factorization n).sum (fun p _ => 1)
+```
+
+In this example, the generated Lean type checks but it does 
+not produce the correct sequence. Note that the use of `p` produces an 
+unused variable warning. 
 
 
 ## Correct Examples
