@@ -42,7 +42,7 @@ OEIS_LEAN_OUTPUT_FILE = os.environ.get(
 )
 
 OEIS_EXEC_OUTPUT_FILE = os.environ.get(
-    "OEIS_EXEC_OUTPUT_FILE", os.path.expanduser("~/oeis_exec_output.json")
+    "OEIS_EXEC_OUTPUT_FILE", os.path.expanduser("~/oeis_exec_output-11-07.json")
 )
 
 
@@ -67,7 +67,10 @@ def exec_oeis_python(python_source):
             text=True,
             timeout=600,
         )
-        return result.stdout
+        if result.returncode == 0:
+            return result.stdout
+        else:
+            raise Exception(f"Error: non-zero return code {result.returncode}")
     except Exception as e:
         return f"Got exception: {e}"
 
@@ -144,8 +147,11 @@ def get_oeis_exec_results_from_file():
     """
     Read the results of the OEIS Python exec processing from a previous run.
     """
-    with open(OEIS_EXEC_OUTPUT_FILE, "r") as f:
-        return json.load(f)
+    try:
+        with open(OEIS_EXEC_OUTPUT_FILE, "r") as f:
+            return json.load(f)
+    except:
+        return {}
 
 
 def write_oeis_exec_results_file(results):
@@ -154,7 +160,7 @@ def write_oeis_exec_results_file(results):
         r.write(json.dumps(results))
 
 
-def exec_all_oeis_python(start_from_prev=True, tot_seqs_limit=500):
+def exec_all_oeis_python(start_from_prev=True, tot_seqs_limit=1000):
     """
     Function to try and execute the Python code associated with a set of OEIS sequences
     and compare results with the sequence values. This function writes the results

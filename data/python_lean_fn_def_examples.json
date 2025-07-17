@@ -1,0 +1,23 @@
+{
+    "A000045": {
+        "python": "def fib(n):\n    x, y = 0, 1\n    for _ in range(n):\n        yield x\n        x, y = y, x+y",
+        "lean": "def Fibonacci2 (n : ℕ) : ℕ := Id.run do\n  let mut x := 0\n  let mut x_prev := 0\n  let mut y := 1\n  for _ in [0:n] do\n    x_prev := x\n    x := y\n    y := x_prev + y\n  pure x",
+        "similarity": 8
+
+    },
+    "A000217": {
+        "python": "def tri2(n):\n    yield 0\n    x, y = 1, 1\n    for _ in range(n):\n        yield x\n        x, y = x + y + 1, y + 1",
+        "lean": "def Triangular2 (n : ℕ) : ℕ := Id.run do\n  let mut result : ℕ := 0\n  let mut x := 1\n  let mut y := 1\n  for _ in [1:(n+1)] do\n    result := x\n    x := x + y + 1\n    y := y + 1\n  result",
+        "similarity": 8
+    },
+    "A000108" : {
+        "python": "A000108 = [1]\nfor n in range(1000):\n    A000108.append(A000108[-1]*(4*n+2)//(n+2))",
+        "lean": "def Step : ℕ × ℕ → ℕ × ℕ :=\n  fun ⟨i, x⟩ => ⟨i + 1, x * (4 * i + 2) / (i + 2)⟩\n\ndef Catalan₂ (n : ℕ) : ℕ :=\n  Nat.iterate Step n (0, 1) |>.snd",
+        "similarity": 5
+    },
+    "A007318": {
+        "python": "from math import comb, isqrt\ndef A007318(n): return comb(r:=(m:=isqrt(k:=n+1<<1))-(k<=m*(m+1)), n-comb(r+1, 2))",
+        "lean": "def Pascal₂ (n : ℕ) : ℕ :=\n  let k := 2 * (n + 1)\n  let m := Nat.sqrt k\n  let r := m - if k ≤ m * (m + 1) then 1 else 0\n  Nat.choose r (n - Nat.choose (r + 1) 2)",
+        "similarity": 8
+    }
+}

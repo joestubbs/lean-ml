@@ -23,18 +23,40 @@ import llms
 # LLM_MODEL="Meta-Llama-3.1-8B-Instruct"
 
 # Niall's Sambanova Project (DeepSeek and Llama 3.3) ----
-LLM_API_KEY = "4bb30afe-fa9b-4dde-b69b-354c20fcc712"
-LLM_BASE_URL = "https://tejas.tacc.utexas.edu/v1/bf130648-8c40-4a34-a23c-da4f71e90073"
-# LLM_MODEL="DeepSeek-R1-Distill-Llama-70B"
-LLM_MODEL = "Meta-Llama-3.3-70B-Instruct"
+# LLM_API_KEY = "4bb30afe-fa9b-4dde-b69b-354c20fcc712"
+# LLM_BASE_URL = "https://tejas.tacc.utexas.edu/v1/bf130648-8c40-4a34-a23c-da4f71e90073"
+# LLM_MODEL = "DeepSeek-R1-Distill-Llama-70B"
+# LLM_MODEL = "Meta-Llama-3.3-70B-Instruct"
+
+# Llama 4
+LLM_API_KEY = "f4fda34e-dca7-4297-9bbe-ecff05d8ce71"
+LLM_BASE_URL = "https://tejas.tacc.utexas.edu/v1/5ca719f0-5bff-4d87-a84c-e09cdbe08d14"
+LLM_MODEL = "Llama-4-Maverick-17B-128E-Instruct"
 
 # not currently used --
 LEAN_MCP_API_KEY = os.environ.get(
     "LEAN_MCP_API_KEY", "ZXQgrJ8bb83aRc84KYLQkBPStz7iO-kwnzhoWverOpA"
 )
 
+OEIS_RESULTS_FILE = os.environ.get(
+    "OEIS_RESULTS_FILE", os.path.expanduser("~/oeis_python_results_more.json")
+)
+
+# Path to an output file where this script should write its results
+OEIS_LEAN_OUTPUT_FILE = os.environ.get(
+    "OEIS_LEAN_OUTPUT_FILE", os.path.expanduser("~/oeis_lean_source_llama-Jul-12.json")
+)
+
 
 # LLM Functions ---------------------------------------------
+
+
+def get_python_src():
+    """
+    Load the OEIS sequences that have Python source implementations.
+    """
+    with open(OEIS_RESULTS_FILE, "r") as f:
+        return json.load(f)
 
 
 def get_lean_server(imports=["Init", "Mathlib"]):
@@ -274,7 +296,7 @@ def get_oeis_results_from_file():
         return json.load(f)
 
 
-def process_oeis_sequences(start_from_prev=True, tot_seqs_limit=100):
+def process_oeis_sequences(start_from_prev=False, tot_seqs_limit=1):
     """
     Function to process a set of OEIS sequences from the OEIS_RESULTS_FILE and
     generate Lean source code for each function. This function will process the
