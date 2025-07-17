@@ -87,10 +87,26 @@ import Mathlib.NumberTheory.PrimeCounting
 def a (n : ℕ) : ℕ := (Nat.factorization n).sum (fun p _ => 1)
 ```
 
-In this example, the generated Lean type checks but it does 
+*Discussion:* In this example, the generated Lean type checks but it does 
 not produce the correct sequence. Note that the use of `p` produces an 
 unused variable warning. 
 
+The main issue is that the auxiliary anonymous function is collapsing all the
+values to 1, while the factorization is producing the number of primes (with 
+multiplicity), so these need to be passed to the sum. The primary fix is to 
+pass these, like so (note it is the second parameter, so the first is unused
+and can be anonymized):
+
+```
+def a (n : ℕ) : ℕ := (Nat.factorization n).sum (fun _ x => x)
+```
+
+But as with the previous example, this function is off by 1, so the correct
+solution is:
+
+```
+def a (n : ℕ) : ℕ := (Nat.factorization (n+1)).sum (fun _ x => x)
+```
 
 ## Correct Examples
 
